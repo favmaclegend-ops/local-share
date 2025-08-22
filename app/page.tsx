@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { sendFile, receiveFile, triggerDownload, FileProgress } from '@/lib/fileTransfer';
 
 // Simple inline implementation to avoid module issues
 interface Device {
@@ -162,15 +163,19 @@ export default function Page() {
   }
   
   // Setup data channel handlers
-  const setupDataChannelHandlers = (dataChannel: RTCDataChannel, deviceId: string) => {
-    dataChannel.onopen = () => {
-      console.log(`🎉 Data channel opened with ${deviceId}`)
-    }
-    
-    dataChannel.onmessage = (event) => {
-      handleDataChannelMessage(deviceId, event)
-    }
-  }
+    const setupDataChannelHandlers = (dc: RTCDataChannel, remoteId: string) => {
+        dc.onopen = () => console.log(`🎉 Data channel opened with ${remoteId}`);
+
+        receiveFile(dc, (p) => setFileTransferProgress(p)).then(({ blob, meta }) => {
+            const url = URL.createObjectURL(blob);
+            setReceivedFiles((prev) => [
+                ...prev,
+                { name: meta.name, size: meta.size, blob, url, receivedAt: new Date() },
+            ]);
+            setFileTransferProgress(null);
+            triggerDownload(blob, meta.name); // auto-download
+        });
+    };
   
   // Handle incoming messages/files
   const handleDataChannelMessage = (deviceId: string, event: MessageEvent) => {
@@ -427,16 +432,29 @@ export default function Page() {
     }
   }
 
-  const handleSendFiles = (targetDeviceId: string) => {
-    if (selectedFiles.length === 0) {
-      onPickFiles()
-      return
-    }
+    const handleSendFiles = async (targetDeviceId: string) => {
+        const conn = connections.get(targetDeviceId);
+        if (!conn?.dataChannel || conn.dataChannel.readyState !== 'open')
+            return alert('No open data-channel');
 
-    // Send first file (in a real app, you'd handle multiple files)
-    handleSendFile(targetDeviceId, selectedFiles[0])
-  }
+        const file = selectedFiles[0];
+        if (!file) return onPickFiles(); // open file picker first
 
+        setSendingTo(targetDeviceId);
+        try {
+            await sendFile(file, conn.dataChannel, (sent) =>
+                setFileTransferProgress({
+                    fileName: file.name,
+                    progress: (sent / file.size) * 100,
+                    receivedSize: sent,
+                    totalSize: file.size,
+                })
+            );
+        } finally {
+            setSendingTo(null);
+            setSelectedFiles([]);
+        }
+    };
   const handleSendTestMessage = async (targetDeviceId: string) => {
     try {
       // Get the WebRTC connection from our networking hook

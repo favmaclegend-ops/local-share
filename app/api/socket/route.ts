@@ -16,6 +16,7 @@ interface SignalingMessage {
   sourceDeviceId: string
 }
 
+
 class SignalingServer {
   private io: Server
   private devices: Map<string, Device> = new Map()
@@ -63,7 +64,6 @@ class SignalingServer {
 
       socket.on('webrtc-signal', (message: SignalingMessage) => {
         console.log(`WebRTC signal: ${message.type} from ${message.sourceDeviceId} to ${message.targetDeviceId}`)
-        
         // Forward the signaling message to the target device
         const targetDevice = this.devices.get(message.targetDeviceId)
         if (targetDevice) {
@@ -148,8 +148,7 @@ let signalingServer: SignalingServer | null = null
 
 export async function GET(request: NextRequest) {
   if (!signalingServer) {
-    // This is a placeholder - in a real Next.js app, you'd need to set up Socket.IO differently
-    // For now, we'll return a message indicating the signaling server endpoint
+    
     return Response.json({ 
       message: 'Signaling server endpoint - WebSocket upgrade required',
       endpoint: '/api/socket'
@@ -158,3 +157,5 @@ export async function GET(request: NextRequest) {
 
   return Response.json({ message: 'Signaling server running' })
 }
+
+
